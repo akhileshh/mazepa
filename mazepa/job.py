@@ -8,7 +8,9 @@ class Task:
 
 class Job:
     def __init__(self, *kargs, **kwargs):
-        pass
+        # generate tasks on demand (generator)
+        # to prevent memory blow up if number of tasks is very large
+        self.lazy = False
 
     def get_tasks(self):
         raise NotImplementedError
@@ -34,8 +36,21 @@ class Job:
                     break
                 elif isinstance(next_step, list):
                     result.extend(next_step)
-
         return result
+
+    def get_next_task(self):
+        """
+        returns: task that can be completed.
+        """
+        while True:
+            # squeeze the job until it's either done or returns a barrier
+            next_step = self.get_tasks()
+            if next_step is Barrier:
+                raise StopIteration
+            elif isinstance(next_step, Task):
+                yield next_step
+            else:
+                raise ValueError("Not a task")
 
     def old_get_next_task_batch(self):
         """

@@ -17,7 +17,6 @@ class Scheduler:
             threads=threads,
         )
         self.unfinished_jobs = {}
-        self.finished_jobs = {}
 
     def all_jobs_finished(self):
         return bool(self.unfinished_jobs)
@@ -30,7 +29,6 @@ class Scheduler:
     def execute_until_completion(self, sleep_gap_sec=15):
         jobs_spec = AllJobsIndicator()
         self.submit_jobs(jobs_spec)
-
         while True:
             self.submit_ready_jobs()
             if not self.unfinished_jobs:
@@ -46,6 +44,9 @@ class Scheduler:
             # if this job is flagged for execution
             if isinstance(jobs_spec, AllJobsIndicator) or job_name in jobs_spec:
                 if isinstance(job, Job):
+                    if job.lazy:
+                        self._submit_job_lazy(job, job_name)
+                        return
                     this_job_tasks = job.get_next_task_batch()
                     print(
                         "Got {} tasks from job '{}'".format(
@@ -62,14 +63,7 @@ class Scheduler:
                         jobs_just_finished.append(job_name)
                 for t in this_job_tasks:
                     t.job_name = job_name
-
                 tasks.extend(this_job_tasks)
-
-        # Move finished jobs to finished dict
-        for job_name in jobs_just_finished:
-            print("Flagging job as FINISHED: '{}'".format(job_name))
-            self.finished_jobs[job_name] = self.unfinished_jobs[job_name]
-            del self.unfinished_jobs[job_name]
 
         if len(tasks) > 0:
             print("Scheduling {} tasks..".format(len(tasks)))
@@ -111,3 +105,30 @@ class Scheduler:
 
     def unregister_job(self, job_name):
         del self.unfinished_jobs[job_name]
+
+    def _submit_job_lazy(self, job):
+        from queue import Queue, Empty
+        import threading
+
+        def worker(q):
+            while True:
+                try:
+                    tasks = q.get(timeout=10)
+                except Empty:
+                    return
+                self.queue.submit_mazepa_tasks(tasks)
+                q.task_done()
+
+        q = Queue()
+        for _ in range(self.queue.threads):
+            threading.Thread(target=worker, args=(q,)).start()
+
+        tasks = []
+        for t in job.get_next_task():
+            tasks.append(t)
+            if len(tasks) > 10000:
+                q.put_nowait(tasks)
+                tasks = []
+        if tasks:  # remaining tasks
+            q.put_nowait(tasks)
+        q.join()

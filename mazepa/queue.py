@@ -99,7 +99,11 @@ def send_message(queue_api_obj, queue_sqs_obj, message):
 
 class Queue:
     def __init__(
-        self, queue_name=None, completion_queue_name=None, threads=1, queue_region=None
+        self,
+        queue_name=None,
+        completion_queue_name=None,
+        threads=1,
+        queue_region=None,
     ):
         self.threads = threads
         self.queue_name = queue_name
@@ -125,9 +129,7 @@ class Queue:
                 self.completion_queue_url = self.queue_boto.get_queue_url(
                     QueueName=completion_queue_name
                 )["QueueUrl"]
-
                 self.completion_registry = defaultdict(lambda: [])
-
             else:
                 self.completion_queue = None
                 self.completion_queue_url = None
